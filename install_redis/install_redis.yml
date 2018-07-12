@@ -1,0 +1,173 @@
+- hosts: "{{ variable_host | default('tag_Name_es_node') }}"
+  user: ubuntu
+  serial: 3
+  become: yes
+  become_user: root
+  vars:
+    aws_region: us-west-2
+
+  tasks:
+  - name: Wait 300 seconds for port 22 to become open and contain "OpenSSH"
+    wait_for:
+      port: 22
+      host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+      search_regex: OpenSSH
+      delay: 2
+    vars:
+      ansible_connection: local
+
+  - debug:
+      msg: "public IP {{ inventory_hostname }} and Private IP {{ ansible_hostname }}"
+
+  - name: Expand /var/log
+    command: lvextend -L 15G /dev/VG00/lv_var_log
+    ignore_errors: yes
+
+  - name: Resize /var/log
+    command: resize2fs /dev/VG00/lv_var_log
+
+  - name: Expand /var lv
+    command: lvextend -l +100%FREE /dev/VG00/lv_var
+    ignore_errors: yes
+
+  - name: Resize /var lv
+    command: resize2fs /dev/VG00/lv_var
+
+  - name: Clean /opt/twemproxy/
+    file:
+      state: absent
+      path: "/opt/twemproxy/"
+
+  - name: Creates directory
+    file: path=/home/ubuntu/scripts owner=ubuntu group=ubuntu state=directory mode=0755
+
+  - name: copy redis_autocluster to /home/ubuntu/scripts/redis_autocluster.py
+    copy:
+      src: ../redis_autocluster.py
+      dest: /home/ubuntu/scripts/redis_autocluster.py
+      owner: ubuntu
+      group: ubuntu
+      mode: 0755
+
+  - name: copy requirements to /home/ubuntu/scripts/requirements.txt
+    copy:
+      src: ./requirements.txt
+      dest: /home/ubuntu/scripts/requirements.txt
+      owner: ubuntu
+      group: ubuntu
+      mode: 0644
+
+  - name: copy twemproxy to /etc/init.d/twemproxy
+    copy:
+      src: ../twemproxy
+      dest: /etc/init.d/twemproxy
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: Run "apt-get update"
+    apt: update_cache=yes cache_valid_time=3600
+    register: apt_result
+    until: apt_result|success
+    retries: 20
+    delay: 6
+
+  - name: added redis repository
+    apt_repository:
+      repo: 'ppa:twemproxy/stable'
+
+  - name: Install latest version redis
+    apt: name={{ item }} update_cache=no install_recommends=no force=yes
+    with_items:
+      - redis-server
+      - redis-sentinel
+      - unzip
+      - python-pip
+      - libtool
+      - autoconf
+      - automake
+#      - twemproxy
+
+  # Install specified python requirements.
+  - pip:
+      requirements: /home/ubuntu/scripts/requirements.txt
+
+  - name: Unarchive twemproxy to /opt/twemproxy
+    unarchive:
+      src: https://github.com/twitter/twemproxy/archive/master.zip
+      dest: /opt
+      remote_src: yes
+
+  - name: rename twemproxy-master to /opt/twemproxy/twemproxy
+    command: mv /opt/twemproxy-master /opt/twemproxy
+
+  - name: Twemproxy autoreconf
+    shell: autoreconf -fvi
+    args:
+      chdir: /opt/twemproxy/
+
+  - name: Twemproxy configure
+    shell: ./configure --enable-debug=full && make
+    args:
+      chdir: /opt/twemproxy
+
+  - name: Twemproxy make
+    shell: make
+    args:
+      chdir: /opt/twemproxy
+
+  - name: copy redis_autocluster to /home/ubuntu/scripts/redis_autocluster.py
+    copy:
+      src: ../redis_nutcracker.yml
+      dest: /opt/twemproxy/conf/redis_nutcracker.yml
+      owner: ubuntu
+      group: ubuntu
+
+  - name: copy redis.conf to /etc/redis/redis.conf
+    copy:
+      src: ../redis.conf
+      dest: /etc/redis/redis.conf
+      owner: redis
+      group: redis
+
+  - name: Set chown /opt/twemproxy/twemproxy
+    file:
+      path: /opt/twemproxy
+      owner: ubuntu
+      group: ubuntu
+      recurse: yes
+
+  - name: download sentinel.conf
+    get_url:
+      url: http://download.redis.io/redis-stable/sentinel.conf
+      dest: /etc/redis/sentinel.conf
+      owner: redis
+      group: redis
+
+  - name: enable service twemproxy
+    systemd:
+      name: twemproxy
+      enabled: yes
+
+  - name: enable service redis-server
+    systemd:
+      name: redis-server
+      enabled: yes
+
+  - name: reload systemd
+    command: systemctl daemon-reload
+
+  - name: enable service redis-server
+    systemd:
+      name: redis-server
+      enabled: yes
+
+  - name: enable service redis-sentinel
+    systemd:
+      name: redis-sentinel
+      enabled: yes
+
+  - name: enable service twemproxy-server
+    systemd:
+      name: twemproxy
+      enabled: yes

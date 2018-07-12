@@ -1,0 +1,47 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          twemproxy
+# Required-Start:    $all
+# Required-Stop:    $all
+# Default-Start:    2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Starts twemproxy
+# Description:      Starts twemproxy using start-stop-daemon
+### END INIT INFO
+
+NAME=nutcracker
+BIN="/opt/twemproxy/src/nutcracker -c /opt/twemproxy/conf/redis_nutcracker.yml -v 11"
+TWEMPROXY_PID=/var/run/redis/nutcracker.pid
+CMD=$1
+
+start() {
+        echo "Starting $NAME ..."
+        exec 2>&1 $BIN &
+        echo $! > "${TWEMPROXY_PID}";
+}
+
+stop() {
+        PID=`cat $TWEMPROXY_PID`
+        echo "Stopping $NAME ($PID) ..."
+        kill $PID
+}
+
+restart() {
+        echo "Restarting $NAME ..."
+        stop
+        start
+}
+
+case "$CMD" in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+        restart)
+                restart
+                ;;
+        *)
+                echo "Usage $0 {start|stop|restart}"
+esac

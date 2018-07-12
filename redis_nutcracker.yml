@@ -1,0 +1,12 @@
+redis1:
+  auto_eject_hosts: true
+  distribution: ketama
+  hash: fnv1a_64
+  listen: 127.0.0.1:22121
+  redis: true
+  server_failure_limit: 1
+  server_retry_timeout: 2000
+  servers:
+  - 127.0.0.1:6379:1
+  - 127.0.0.1:6379:1
+  timeout: 400

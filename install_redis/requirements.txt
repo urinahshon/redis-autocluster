@@ -1,0 +1,11 @@
+boto
+boto3
+botocore
+paramiko
+pip
+pycparser
+pycrypto
+PyYAML
+requests
+wheel
+awscli
