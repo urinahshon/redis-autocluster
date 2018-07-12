@@ -96,7 +96,13 @@ resource "aws_launch_configuration" "redis-lc" {
 
   security_groups = ["${aws_security_group.redis_sg.id}"]
   # user_data       = "${file("userdata.sh")}"
-  user_data       = "#!/bin/bash\nset +x\nexport AWS_DEFAULT_REGION=${var.aws_region}\naws s3 cp s3://saas-userdata-scripts/redis_autocluster.py /home/ubuntu/scripts \nsudo service redis-sentinel restart\nsudo python /home/ubuntu/scripts/redis_autocluster.py tag=${var.tag_name}"
+  user_data       = <<EOF
+#!/bin/bash
+set +x
+export AWS_DEFAULT_REGION=${var.aws_region}
+sudo service redis-sentinel restart
+sudo python /home/ubuntu/scripts/redis_autocluster.py tag=${var.tag_name}"
+EOF
   key_name        = "${var.key_name}"
   iam_instance_profile = "EC2Discovery"
 }
